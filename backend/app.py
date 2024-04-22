@@ -1,11 +1,21 @@
 import os
 import random
-
+import asyncio
 from flask import Flask, request, jsonify
-
+from twilio.rest import Client
 from utils import boolean, get_bearer_token
-from mongo import create_user, authenticate, get_user_by_id, de_authenticate, store_2fa, verify_2fa, get_user_by_email, \
-    create_token, get_user_by_token, update_user
+from mongo import (
+    create_user,
+    authenticate,
+    get_user_by_id,
+    de_authenticate,
+    store_2fa,
+    verify_2fa,
+    get_user_by_email,
+    create_token,
+    get_user_by_token,
+    update_user,
+)
 from flask_cors import CORS, cross_origin
 from flask_mailing import Mail, Message
 
@@ -14,32 +24,38 @@ cors = CORS(app)
 mail = Mail()
 
 app.config["CORS_HEADERS"] = "Content-Type"
-app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME")
-app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD")
-app.config['MAIL_PORT'] = int(os.getenv("MAIL_PORT"))
-app.config['MAIL_SERVER'] = os.getenv("MAIL_SERVER")
-# app.config['MAIL_USE_TLS'] = boolean(os.getenv("MAIL_USE_TLS"))
-# app.config['MAIL_USE_SSL'] = boolean(os.getenv("MAIL_USE_SSL"))
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv("MAIL_DEFAULT_SENDER")
+app.config["MAIL_USERNAME"] = os.getenv("MAIL_USERNAME")
+app.config["MAIL_PASSWORD"] = os.getenv("MAIL_PASSWORD")
+app.config["MAIL_PORT"] = int(os.getenv("MAIL_PORT"))
+app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER")
+app.config["MAIL_USE_TLS"] = boolean(os.getenv("MAIL_USE_TLS"))
+app.config["MAIL_USE_SSL"] = boolean(os.getenv("MAIL_USE_SSL"))
+app.config["MAIL_DEFAULT_SENDER"] = os.getenv("MAIL_DEFAULT_SENDER")
 mail.init_app(app)
+
+account_sid = os.getenv("TWILIO_SID")
+auth_token = os.getenv("TWILIO_TOKEN")
+client = Client(account_sid, auth_token)
 
 
 async def send_mail(subject, body, recipients):
     if not isinstance(recipients, list):
         recipients = [recipients]
 
-    message = Message(
-        subject=subject,
-        recipients=recipients,
-        body=body
-    )
+    message = Message(subject=subject, recipients=recipients, body=body)
 
     await mail.send_message(message)
     return jsonify({"message": "Mail sent"}), 200
 
 
 def send_phone_message(body, recipients):
+    if isinstance(recipients, list):
+        for recipient in recipients:
+            send_phone_message(body, recipient)
+
+    message = client.messages.create(body=body, from_=os.getenv("TWILIO_PHONE"), to=recipients)
     print(f"Sending message to {recipients}: {body}")
+    return jsonify({"message": "Message sent"}), 200
 
 
 @app.route("/api/status", methods=["GET"])
@@ -86,7 +102,7 @@ def send_2fa_email():
     subject = "2FA Code"
     code = str(random.randint(100000, 999999))
     body = "Your 2FA code is " + code
-    send_mail(subject, body, email)
+    asyncio.run(send_mail(subject, body, email))
     print(f"2FA code for {email}: {code}")
     store_2fa(email, code)
     return jsonify({"message": "2FA code sent"}), 200
@@ -193,13 +209,18 @@ def _update_user():
     if not success:
         return jsonify({"error": "Failed to update user"}), 500
 
-    return jsonify({
-        "email": user["email"],
-        "phone": phone,
-        "dob": dob,
-        "token": bearer,
-        "gender": gender
-    }), 200
+    return (
+        jsonify(
+            {
+                "email": user["email"],
+                "phone": phone,
+                "dob": dob,
+                "token": bearer,
+                "gender": gender,
+            }
+        ),
+        200,
+    )
 
 
 if __name__ == "__main__":
