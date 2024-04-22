@@ -99,7 +99,6 @@ def verify_2fa(email, code):
     secret = _2fa.find_one({"email": email})
     print(f"2FA code for {email}: {code}")
     if secret:
-        print(secret["secret"])
         validity = secret["secret"] == code
         if validity:
             _2fa.delete_one({"email": email})

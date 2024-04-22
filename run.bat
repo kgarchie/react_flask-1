@@ -1,9 +1,9 @@
 @echo off
 
 if not exist .\backend\venv\Scripts\activate.bat (
-    python -m venv .\backend\venv
+    python3 -m venv .\backend\venv
     call .\backend\venv\Scripts\activate
-    pip install -r .\backend\requirements.txt
+    pip3 install -r .\backend\requirements.txt
 ) else (
     call .\backend\venv\Scripts\activate
 )
